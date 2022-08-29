@@ -2,11 +2,6 @@ use crate::lexer::token::keyword::Keyword;
 
 pub mod keyword;
 
-pub struct Span {
-    pub start: usize,
-    pub end: usize,
-}
-
 #[derive(Debug, PartialEq)]
 pub enum Token {
     Identifier(String),

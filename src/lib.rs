@@ -16,19 +16,5 @@ mod test {
         let tokens = lexer.collect::<Vec<_>>();
         println!("Done in {:?}", start.elapsed());
         println!("{:?}", tokens);
-        assert_eq!(
-            tokens.as_slice(),
-            &[
-                Token::Keyword(Keyword::Fn),
-                Token::Identifier("main".to_string()),
-                Token::OpenParen,
-                Token::CloseParen,
-                Token::OpenBrace,
-                Token::Keyword(Keyword::Return),
-                Token::Keyword(Keyword::True),
-                Token::Semicolon,
-                Token::CloseBrace
-            ]
-        );
     }
 }
