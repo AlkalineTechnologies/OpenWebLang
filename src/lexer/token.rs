@@ -145,4 +145,21 @@ impl Token {
     pub fn is_unary_op(&self) -> bool {
         matches!(self, Token::Not | Token::Sub)
     }
+    pub fn is_assign_op(&self) -> bool {
+        matches!(
+            self,
+            Token::Assign
+                | Token::AddAssign
+                | Token::SubAssign
+                | Token::MulAssign
+                | Token::DivAssign
+                | Token::ModAssign
+                | Token::PowAssign
+                | Token::BitAndAssign
+                | Token::BitOrAssign
+                | Token::BitXorAssign
+                | Token::ShlAssign
+                | Token::ShrAssign
+        )
+    }
 }

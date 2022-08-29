@@ -1,3 +1,4 @@
+use crate::lexer::token::keyword::Keyword;
 use crate::lexer::token::Token;
 use crate::lexer::LexerInput;
 use std::ops::Range;
@@ -10,29 +11,6 @@ impl ParserInput {
     fn next(&mut self) -> Option<(Token, Range<usize>)> {
         self.pos += 1;
         self.tokens.get(self.pos - 1).cloned()
-    }
-    fn peek_for(&mut self, token: &Token) -> bool {
-        self.tokens.get(self.pos).map_or(false, |t| {
-            if std::mem::discriminant(&t.0) == std::mem::discriminant(token) {
-                self.pos += 1;
-                true
-            } else {
-                false
-            }
-        })
-    }
-    fn peek_for_chain(&mut self, tokens: &[Token]) -> bool {
-        let mut matches = true;
-        for (i, t) in tokens.iter().enumerate() {
-            if std::mem::discriminant(&self.tokens[self.pos + i].0) != std::mem::discriminant(t) {
-                matches = false;
-                break;
-            }
-        }
-        if matches {
-            self.pos += tokens.len();
-        }
-        matches
     }
     fn peek<F>(&mut self, f: F) -> bool
     where
@@ -65,10 +43,189 @@ impl Clone for ParserInput {
 }
 
 #[derive(Debug)]
+pub enum Statement {
+    FunctionDecl(
+        String,
+        Option<Expression>,
+        Vec<(String, Expression)>,
+        Expression,
+    ),
+    VariableDecl(String, Option<Expression>),
+    Assign(Expression, Token, Expression),
+    Expression(Expression),
+}
+impl Statement {
+    pub fn parse(input: &mut ParserInput, lexer_input: &mut LexerInput) -> Option<Statement> {
+        if input.peek(|t| matches!(t, Token::Keyword(Keyword::Fn))) {
+            input.next();
+            let ident = input.next().unwrap_or_else(|| {
+                error!(
+                    lexer_input.clone(),
+                    input
+                        .next()
+                        .map_or(input.tokens.last().unwrap().1.clone(), |t| t.1),
+                    "Expected identifier"
+                )
+            });
+            let ident_str = match ident.0 {
+                Token::Identifier(s) => s,
+                _ => {
+                    error!(lexer_input.clone(), ident.1, "Expected identifier");
+                }
+            };
+            if !input.peek(|t| matches!(t, Token::OpenParen)) {
+                error!(
+                    lexer_input.clone(),
+                    input
+                        .next()
+                        .map_or(input.tokens.last().unwrap().1.clone(), |t| t.1),
+                    "Expected opening paren"
+                );
+            }
+            let mut params = Vec::new();
+            input.next();
+            while let Some((Token::Identifier(name), _)) = input.next() {
+                if !input.peek(|t| matches!(t, Token::Colon)) {
+                    error!(
+                        lexer_input.clone(),
+                        input
+                            .next()
+                            .map_or(input.tokens.last().unwrap().1.clone(), |t| t.1),
+                        "Expected colon"
+                    );
+                }
+                input.next();
+                let param_type = Expression::parse(input, lexer_input).unwrap_or_else(|| {
+                    error!(
+                        lexer_input.clone(),
+                        input
+                            .next()
+                            .map_or(input.tokens.last().unwrap().1.clone(), |t| t.1),
+                        "Expected expression"
+                    );
+                });
+                params.push((name, param_type));
+                if input.peek(|t| matches!(t, Token::CloseParen)) {
+                    break;
+                }
+                if !input.peek(|t| matches!(t, Token::Comma)) {
+                    error!(
+                        lexer_input.clone(),
+                        input
+                            .next()
+                            .map_or(input.tokens.last().unwrap().1.clone(), |t| t.1),
+                        "Expected comma"
+                    );
+                } else {
+                    input.next();
+                }
+            }
+            if !input.peek(|t| matches!(t, Token::CloseParen)) {
+                error!(
+                    lexer_input.clone(),
+                    input
+                        .next()
+                        .map_or(input.tokens.last().unwrap().1.clone(), |t| t.1),
+                    "Expected closing paren"
+                );
+            } else {
+                input.next();
+            }
+            let return_type = if input.peek(|t| matches!(t, Token::Arrow)) {
+                input.next();
+                Some(Expression::parse(input, lexer_input).unwrap_or_else(|| {
+                    error!(
+                        lexer_input.clone(),
+                        input
+                            .next()
+                            .map_or(input.tokens.last().unwrap().1.clone(), |t| t.1),
+                        "Expected expression"
+                    );
+                }))
+            } else {
+                None
+            };
+            let expr = Expression::parse(input, lexer_input).unwrap_or_else(|| {
+                error!(
+                    lexer_input.clone(),
+                    input
+                        .next()
+                        .map_or(input.tokens.last().unwrap().1.clone(), |t| t.1),
+                    "Expected expression"
+                );
+            });
+            Some(Statement::FunctionDecl(
+                ident_str,
+                return_type,
+                params,
+                expr,
+            ))
+        } else {
+            let val = Statement::variable_decl(input, lexer_input);
+            if input.peek(|t| matches!(t, Token::Semicolon)) {
+                input.next();
+                val
+            } else {
+                error!(
+                    lexer_input.clone(),
+                    input
+                        .next()
+                        .map_or(input.tokens.last().unwrap().1.clone(), |t| t.1),
+                    "Expected semicolon"
+                );
+            }
+        }
+    }
+    pub fn variable_decl(
+        input: &mut ParserInput,
+        lexer_input: &mut LexerInput,
+    ) -> Option<Statement> {
+        if input.peek(|t| matches!(t, Token::Keyword(Keyword::Let))) {
+            input.next();
+            let ident = input.next().unwrap_or_else(|| {
+                error!(
+                    lexer_input.clone(),
+                    input
+                        .next()
+                        .map_or(input.tokens.last().unwrap().1.clone(), |t| t.1),
+                    "Expected identifier"
+                )
+            });
+            let ident_str = match ident.0 {
+                Token::Identifier(s) => s,
+                _ => {
+                    error!(lexer_input.clone(), ident.1, "Expected identifier");
+                }
+            };
+            if input.peek(Token::is_assign_op) {
+                input.next();
+                let expr = Expression::parse(input, lexer_input)
+                    .unwrap_or_else(|| error!(lexer_input.clone(), ident.1, "Expected expression"));
+                Some(Statement::VariableDecl(ident_str, Some(expr)))
+            } else {
+                Some(Statement::VariableDecl(ident_str, None))
+            }
+        } else {
+            Statement::assign(input, lexer_input)
+        }
+    }
+    pub fn assign(input: &mut ParserInput, lexer_input: &mut LexerInput) -> Option<Statement> {
+        let left = Expression::parse(input, lexer_input)?;
+        if input.peek(Token::is_assign_op) {
+            let op = input.next().unwrap().0;
+            let right = Expression::parse(input, lexer_input)?;
+            Some(Statement::Assign(left, op, right))
+        } else {
+            Some(Statement::Expression(left))
+        }
+    }
+}
+
+#[derive(Debug)]
 pub enum Expression {
     Binary(Box<Expression>, Token, Box<Expression>),
     Unary(Token, Box<Expression>),
-    Block(Vec<Expression>),
+    Block(Vec<Statement>),
     FunctionCall(Vec<String>, Vec<Expression>),
     Path(Vec<String>),
     StringLiteral(String),
@@ -84,7 +241,9 @@ impl Expression {
             let right = Expression::parse(input, lexer_input).unwrap_or_else(|| {
                 error!(
                     lexer_input.clone(),
-                    input.next().unwrap().1,
+                    input
+                        .next()
+                        .map_or(input.tokens.last().unwrap().1.clone(), |t| t.1),
                     "Expected expression"
                 );
             });
@@ -107,7 +266,7 @@ impl Expression {
         if input.peek(|t| matches!(t, Token::OpenBrace)) {
             input.next();
             let mut expressions = Vec::new();
-            while let Some(expr) = Expression::parse(input, lexer_input) {
+            while let Some(expr) = Statement::parse(input, lexer_input) {
                 expressions.push(expr);
                 if input.peek(|t| matches!(t, Token::CloseBrace)) {
                     break;
@@ -116,7 +275,9 @@ impl Expression {
             if !input.peek(|t| matches!(t, Token::CloseBrace)) {
                 error!(
                     lexer_input.clone(),
-                    input.next().unwrap().1,
+                    input
+                        .next()
+                        .map_or(input.tokens.last().unwrap().1.clone(), |t| t.1),
                     "Expected '}}'"
                 );
             } else {
@@ -145,7 +306,9 @@ impl Expression {
                         if !input.peek(|t| matches!(t, Token::Comma)) {
                             error!(
                                 lexer_input.clone(),
-                                input.next().unwrap().1,
+                                input
+                                    .next()
+                                    .map_or(input.tokens.last().unwrap().1.clone(), |t| t.1),
                                 "Expected comma"
                             );
                         } else {

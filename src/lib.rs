@@ -6,7 +6,7 @@ pub mod parser;
 #[cfg(test)]
 mod test {
     use crate::lexer::{Lexer, LexerInput};
-    use crate::parser::{Expression, ParserInput};
+    use crate::parser::{Expression, ParserInput, Statement};
     use std::time::Instant;
 
     #[test]
@@ -25,7 +25,7 @@ mod test {
         let mut parser_input = ParserInput::from(lexer);
         println!(
             "{:?}",
-            Expression::parse(&mut parser_input, &mut lexer_input)
+            Statement::parse(&mut parser_input, &mut lexer_input)
         );
     }
 }
