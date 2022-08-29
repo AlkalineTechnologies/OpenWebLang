@@ -56,7 +56,7 @@ pub enum Statement {
 }
 impl Statement {
     pub fn parse(input: &mut ParserInput, lexer_input: &mut LexerInput) -> Option<Statement> {
-        if input.peek(|t| matches!(t, Token::Keyword(Keyword::Fn))) {
+        if input.peek(|t| matches!(t, Token::Keyword(Keyword::Function))) {
             input.next();
             let ident = input.next().unwrap_or_else(|| {
                 error!(
