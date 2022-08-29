@@ -11,7 +11,7 @@ mod test {
 
     #[test]
     fn lexer() {
-        let lexer = Lexer::new("fn main() { return true; }");
+        let lexer = Lexer::new(include_str!("example.owl"));
         let start = Instant::now();
         let tokens = lexer.collect::<Vec<_>>();
         println!("Done in {:?}", start.elapsed());
