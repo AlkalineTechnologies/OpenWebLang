@@ -2,11 +2,9 @@ use crate::lexer::token::keyword::Keyword;
 use crate::lexer::token::Token;
 use std::ops::Range;
 use std::str::FromStr;
-use std::vec::IntoIter;
 
 pub mod token;
 
-#[derive(Clone)]
 pub struct LexerInput {
     data: Vec<char>,
     pos: usize,
@@ -43,7 +41,7 @@ impl LexerInput {
     where
         F: Fn(&char) -> bool,
     {
-        self.data.get(self.pos).map_or(false, |ch| func(ch))
+        self.data.get(self.pos).map_or(false, func)
     }
 }
 impl From<String> for LexerInput {
@@ -63,6 +61,14 @@ impl Iterator for LexerInput {
     type Item = char;
     fn next(&mut self) -> Option<Self::Item> {
         self.next()
+    }
+}
+impl Clone for LexerInput {
+    fn clone(&self) -> Self {
+        LexerInput {
+            data: self.data.clone(),
+            pos: 0,
+        }
     }
 }
 
@@ -97,168 +103,187 @@ impl Iterator for Lexer {
 
     fn next(&mut self) -> Option<Self::Item> {
         let start = self.input.pos;
-        Some(match self.input.next()? {
-            '(' => (Token::OpenParen, start..self.input.pos),
-            ')' => (Token::CloseParen, start..self.input.pos),
-            '{' => (Token::OpenBrace, start..self.input.pos),
-            '}' => (Token::CloseBrace, start..self.input.pos),
-            '[' => (Token::OpenBracket, start..self.input.pos),
-            ']' => (Token::CloseBracket, start..self.input.pos),
-            '+' => match self.input.peek_for('=') {
-                true => (Token::AddAssign, start..self.input.pos),
-                false => (Token::Add, start..self.input.pos),
-            },
-            '-' => match self.input.peek_for('=') {
-                true => match self.input.peek(char::is_ascii_digit) {
-                    true => (Token::SubAssign, start..self.input.pos),
-                    false => match parse_number(&mut self.input) {
-                        Token::UnsignedLiteral(n) => {
-                            (Token::SignedLiteral(-(n as i64)), start..self.input.pos)
-                        }
-                        Token::FloatLiteral(n) => (Token::FloatLiteral(n), start..self.input.pos),
-                        _ => unreachable!(),
+        Some((
+            match self.input.next()? {
+                '(' => Token::OpenParen,
+                ')' => Token::CloseParen,
+                '{' => Token::OpenBrace,
+                '}' => Token::CloseBrace,
+                '[' => Token::OpenBracket,
+                ']' => Token::CloseBracket,
+                '+' => match self.input.peek_for('=') {
+                    true => Token::AddAssign,
+                    false => Token::Add,
+                },
+                '-' => match self.input.peek_for('=') {
+                    true => Token::SubAssign,
+                    false => match self.input.peek(char::is_ascii_digit) {
+                        true => match parse_number(&mut self.input) {
+                            Token::UnsignedLiteral(n) => Token::SignedLiteral(-(n as i64)),
+                            Token::FloatLiteral(n) => Token::FloatLiteral(n),
+                            _ => unreachable!(),
+                        },
+                        false => match self.input.peek_for('>') {
+                            true => Token::Arrow,
+                            false => Token::Sub,
+                        },
                     },
                 },
-                false => (Token::SubAssign, start..self.input.pos),
-            },
-            '*' => match self.input.peek_for('=') {
-                true => (Token::MulAssign, start..self.input.pos),
-                false => match self.input.peek_for('*') {
-                    true => match self.input.peek_for('=') {
-                        true => (Token::PowAssign, start..self.input.pos),
-                        false => (Token::Pow, start..self.input.pos),
-                    },
-                    false => (Token::Mul, start..self.input.pos),
-                },
-            },
-            '/' => match self.input.peek_for('=') {
-                true => (Token::DivAssign, start..self.input.pos),
-                false => match self.input.peek_for('/') {
-                    true => {
-                        while let Some(ch) = self.input.next() {
-                            if ch == '\n' {
-                                break;
-                            }
-                        }
-                        return self.next();
-                    }
+                '*' => match self.input.peek_for('=') {
+                    true => Token::MulAssign,
                     false => match self.input.peek_for('*') {
+                        true => match self.input.peek_for('=') {
+                            true => Token::PowAssign,
+                            false => Token::Pow,
+                        },
+                        false => Token::Mul,
+                    },
+                },
+                '/' => match self.input.peek_for('=') {
+                    true => Token::DivAssign,
+                    false => match self.input.peek_for('/') {
                         true => {
                             while let Some(ch) = self.input.next() {
-                                if ch == '*' && self.input.peek_for('/') {
+                                if ch == '\n' {
                                     break;
                                 }
                             }
                             return self.next();
                         }
-                        false => (Token::Div, start..self.input.pos),
+                        false => match self.input.peek_for('*') {
+                            true => {
+                                while let Some(ch) = self.input.next() {
+                                    if ch == '*' && self.input.peek_for('/') {
+                                        break;
+                                    }
+                                }
+                                return self.next();
+                            }
+                            false => Token::Div,
+                        },
                     },
                 },
-            },
-            '%' => match self.input.peek_for('=') {
-                true => (Token::ModAssign, start..self.input.pos),
-                false => (Token::Mod, start..self.input.pos),
-            },
-            '&' => match self.input.peek_for('=') {
-                true => (Token::BitAndAssign, start..self.input.pos),
-                false => match self.input.peek_for('&') {
-                    true => (Token::And, start..self.input.pos),
-                    false => (Token::BitAnd, start..self.input.pos),
+                '%' => match self.input.peek_for('=') {
+                    true => Token::ModAssign,
+                    false => Token::Mod,
                 },
-            },
-            '|' => match self.input.peek_for('=') {
-                true => (Token::BitOrAssign, start..self.input.pos),
-                false => match self.input.peek_for('|') {
-                    true => (Token::Or, start..self.input.pos),
-                    false => (Token::BitOr, start..self.input.pos),
+                '&' => match self.input.peek_for('=') {
+                    true => Token::BitAndAssign,
+                    false => match self.input.peek_for('&') {
+                        true => Token::And,
+                        false => Token::BitAnd,
+                    },
                 },
-            },
-            '^' => match self.input.peek_for('=') {
-                true => (Token::BitXorAssign, start..self.input.pos),
-                false => (Token::BitXor, start..self.input.pos),
-            },
-            '!' => match self.input.peek_for('=') {
-                true => (Token::Ne, start..self.input.pos),
-                false => (Token::Not, start..self.input.pos),
-            },
-            '=' => match self.input.peek_for('=') {
-                true => (Token::Eq, start..self.input.pos),
-                false => (Token::Assign, start..self.input.pos),
-            },
-            '<' => match self.input.peek_for('=') {
-                true => (Token::Le, start..self.input.pos),
-                false => (Token::Lt, start..self.input.pos),
-            },
-            '>' => match self.input.peek_for('=') {
-                true => (Token::Ge, start..self.input.pos),
-                false => (Token::Gt, start..self.input.pos),
-            },
-            ',' => (Token::Comma, start..self.input.pos),
-            ';' => (Token::Semicolon, start..self.input.pos),
-            ':' => (Token::Colon, start..self.input.pos),
-            '"' => {
-                let mut string = String::new();
-                while let Some(ch) = self.input.next() {
-                    if ch == '"' {
-                        break;
-                    }
-                    if ch == '\\' {
-                        match self.input.next()? {
-                            'n' => string.push('\n'),
-                            'r' => string.push('\r'),
-                            't' => string.push('\t'),
-                            '\\' => string.push('\\'),
-                            '"' => string.push('"'),
-                            'u' => {
-                                let mut hex = String::new();
-                                for _ in 0..4 {
-                                    hex.push(self.input.next()?);
+                '|' => match self.input.peek_for('=') {
+                    true => Token::BitOrAssign,
+                    false => match self.input.peek_for('|') {
+                        true => Token::Or,
+                        false => Token::BitOr,
+                    },
+                },
+                '^' => match self.input.peek_for('=') {
+                    true => Token::BitXorAssign,
+                    false => Token::BitXor,
+                },
+                '!' => match self.input.peek_for('=') {
+                    true => Token::Ne,
+                    false => Token::Not,
+                },
+                '=' => match self.input.peek_for('=') {
+                    true => Token::Eq,
+                    false => Token::Assign,
+                },
+                '<' => match self.input.peek_for('=') {
+                    true => Token::Le,
+                    false => Token::Lt,
+                },
+                '>' => match self.input.peek_for('=') {
+                    true => Token::Ge,
+                    false => Token::Gt,
+                },
+                ',' => Token::Comma,
+                ';' => Token::Semicolon,
+                '.' => Token::Dot,
+                ':' => Token::Colon,
+                '"' => {
+                    let mut string = String::new();
+                    let mut ended = false;
+                    while let Some(ch) = self.input.next() {
+                        if ch == '"' {
+                            ended = true;
+                            break;
+                        }
+                        if ch == '\\' {
+                            match self.input.next()? {
+                                'n' => string.push('\n'),
+                                'r' => string.push('\r'),
+                                't' => string.push('\t'),
+                                '\\' => string.push('\\'),
+                                '"' => string.push('"'),
+                                'u' => {
+                                    let mut hex = String::new();
+                                    for _ in 0..4 {
+                                        hex.push(self.input.next()?);
+                                    }
+                                    string.push(
+                                        char::from_u32(u32::from_str_radix(&hex, 16).unwrap())
+                                            .unwrap(),
+                                    );
                                 }
-                                string.push(
-                                    char::from_u32(u32::from_str_radix(&hex, 16).unwrap()).unwrap(),
-                                );
-                            }
-                            _ => {
-                                let end = self.input.pos;
-                                error!(&mut self.input, start..end, "Invalid escape sequence")
+                                _ => {
+                                    let end = self.input.pos;
+                                    error!(
+                                        self.input.clone(),
+                                        start..end,
+                                        "Invalid escape sequence"
+                                    )
+                                }
                             }
                         }
+                        string.push(ch);
                     }
-                    string.push(ch);
+                    if !ended {
+                        error!(
+                            self.input.clone(),
+                            start..self.input.pos,
+                            "Unterminated string"
+                        );
+                    }
+                    Token::StringLiteral(string)
                 }
-                (Token::StringLiteral(string), start..self.input.pos)
-            }
-            '\'' => {
-                if let Some(c) = self.input.next() {
-                    if self.input.peek_for('\'') {
-                        (Token::CharLiteral(c), start..self.input.pos)
+                '\'' => {
+                    if let Some(c) = self.input.next() {
+                        if self.input.peek_for('\'') {
+                            Token::CharLiteral(c)
+                        } else {
+                            let end = self.input.pos;
+                            error!(self.input.clone(), start..end, "Invalid character literal")
+                        }
                     } else {
                         let end = self.input.pos;
-                        error!(&mut self.input, start..end, "Invalid character literal")
+                        error!(self.input.clone(), start..end, "Unexpected end of input")
                     }
-                } else {
+                }
+                c if c.is_ascii_digit() => parse_number(&mut self.input),
+                c if c.is_alphabetic() => {
+                    let mut string = String::new();
+                    string.push(c);
+                    while self.input.peek(|&c| c.is_alphanumeric()) {
+                        string.push(self.input.next().unwrap());
+                    }
+                    if let Ok(keyword) = Keyword::from_str(&string) {
+                        Token::Keyword(keyword)
+                    } else {
+                        Token::Identifier(string)
+                    }
+                }
+                c if c.is_whitespace() => return self.next(),
+                _ => {
                     let end = self.input.pos;
-                    error!(&mut self.input, start..end, "Unexpected end of input")
+                    error!(self.input.clone(), start..end, "Unexpected character")
                 }
-            }
-            c if c.is_ascii_digit() => (parse_number(&mut self.input), start..self.input.pos),
-            c if c.is_alphabetic() => {
-                let mut string = String::new();
-                string.push(c);
-                while self.input.peek(|&c| c.is_alphanumeric()) {
-                    string.push(self.input.next().unwrap());
-                }
-                if let Ok(keyword) = Keyword::from_str(&string) {
-                    (Token::Keyword(keyword), start..self.input.pos)
-                } else {
-                    (Token::Identifier(string), start..self.input.pos)
-                }
-            }
-            c if c.is_whitespace() => return self.next(),
-            _ => {
-                let end = self.input.pos;
-                error!(&mut self.input, start..end, "Unexpected character")
-            }
-        })
+            },
+            start..self.input.pos,
+        ))
     }
 }

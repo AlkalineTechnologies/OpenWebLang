@@ -91,6 +91,8 @@ pub enum Token {
     ShlAssign,
     /// a >>= b
     ShrAssign,
+    /// ->
+    Arrow,
 
     // Delimiters
     /// ,
