@@ -230,14 +230,11 @@ impl Iterator for Lexer {
                                             .unwrap(),
                                     );
                                 }
-                                _ => {
-                                    let end = self.input.pos;
-                                    error!(
-                                        self.input.clone(),
-                                        start..end,
-                                        "Invalid escape sequence"
-                                    )
-                                }
+                                _ => error!(
+                                    self.input.clone(),
+                                    start..self.input.pos,
+                                    "Invalid escape sequence"
+                                ),
                             }
                         }
                         string.push(ch);
@@ -256,12 +253,18 @@ impl Iterator for Lexer {
                         if self.input.peek_for('\'') {
                             Token::CharLiteral(c)
                         } else {
-                            let end = self.input.pos;
-                            error!(self.input.clone(), start..end, "Invalid character literal")
+                            error!(
+                                self.input.clone(),
+                                start..self.input.pos,
+                                "Invalid character literal"
+                            )
                         }
                     } else {
-                        let end = self.input.pos;
-                        error!(self.input.clone(), start..end, "Unexpected end of input")
+                        error!(
+                            self.input.clone(),
+                            start..self.input.pos,
+                            "Unexpected end of input"
+                        )
                     }
                 }
                 c if c.is_ascii_digit() => parse_number(&mut self.input),
@@ -278,10 +281,11 @@ impl Iterator for Lexer {
                     }
                 }
                 c if c.is_whitespace() => return self.next(),
-                _ => {
-                    let end = self.input.pos;
-                    error!(self.input.clone(), start..end, "Unexpected character")
-                }
+                _ => error!(
+                    self.input.clone(),
+                    start..self.input.pos,
+                    "Unexpected character"
+                ),
             },
             start..self.input.pos,
         ))
