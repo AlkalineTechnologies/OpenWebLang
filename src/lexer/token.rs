@@ -2,7 +2,7 @@ use crate::lexer::token::keyword::Keyword;
 
 pub mod keyword;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Token {
     Identifier(String),
     Keyword(Keyword),
@@ -103,4 +103,46 @@ pub enum Token {
     Colon,
     /// .
     Dot,
+}
+impl Token {
+    pub fn is_binary_op(&self) -> bool {
+        matches!(
+            self,
+            Token::Add
+                | Token::Sub
+                | Token::Mul
+                | Token::Div
+                | Token::Mod
+                | Token::Pow
+                | Token::BitAnd
+                | Token::BitOr
+                | Token::BitXor
+                | Token::Shl
+                | Token::Shr
+                | Token::And
+                | Token::Or
+                | Token::Not
+                | Token::Eq
+                | Token::Ne
+                | Token::Lt
+                | Token::Le
+                | Token::Gt
+                | Token::Ge
+                | Token::Assign
+                | Token::AddAssign
+                | Token::SubAssign
+                | Token::MulAssign
+                | Token::DivAssign
+                | Token::ModAssign
+                | Token::PowAssign
+                | Token::BitAndAssign
+                | Token::BitOrAssign
+                | Token::BitXorAssign
+                | Token::ShlAssign
+                | Token::ShrAssign
+        )
+    }
+    pub fn is_unary_op(&self) -> bool {
+        matches!(self, Token::Not | Token::Sub)
+    }
 }

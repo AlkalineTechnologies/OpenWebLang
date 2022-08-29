@@ -1,4 +1,1 @@
-let main() -> bool {
-    Console.log("Hello, world!");
-    true
-}
+{ Console.log("Hello, world!") Console.log("Hello, world!") }

@@ -88,8 +88,9 @@ fn parse_number(input: &mut LexerInput) -> Token {
     }
 }
 
+#[derive(Clone)]
 pub struct Lexer {
-    input: LexerInput,
+    pub input: LexerInput,
 }
 impl Lexer {
     pub fn new(input: impl Into<LexerInput>) -> Self {

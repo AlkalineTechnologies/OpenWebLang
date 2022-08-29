@@ -1,12 +1,12 @@
 #[macro_use]
 pub mod error;
 pub mod lexer;
+pub mod parser;
 
 #[cfg(test)]
 mod test {
-    use crate::lexer::token::keyword::Keyword;
-    use crate::lexer::token::Token;
-    use crate::lexer::Lexer;
+    use crate::lexer::{Lexer, LexerInput};
+    use crate::parser::{Expression, ParserInput};
     use std::time::Instant;
 
     #[test]
@@ -16,5 +16,16 @@ mod test {
         let tokens = lexer.collect::<Vec<_>>();
         println!("Done in {:?}", start.elapsed());
         println!("{:?}", tokens);
+    }
+
+    #[test]
+    fn parser() {
+        let lexer = Lexer::new(include_str!("example.owl"));
+        let mut lexer_input = lexer.input.clone();
+        let mut parser_input = ParserInput::from(lexer);
+        println!(
+            "{:?}",
+            Expression::parse(&mut parser_input, &mut lexer_input)
+        );
     }
 }
