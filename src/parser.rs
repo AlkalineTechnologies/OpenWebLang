@@ -21,6 +21,9 @@ impl ParserInput {
     fn rewind(&mut self) {
         self.pos -= 1;
     }
+    fn eof(&self) -> bool {
+        self.pos + 1 >= self.tokens.len()
+    }
 }
 impl<T> From<T> for ParserInput
 where
@@ -50,12 +53,16 @@ pub enum Statement {
         Vec<(String, Expression)>,
         Expression,
     ),
-    VariableDecl(String, Option<Expression>),
+    ClassDecl(String, Vec<Statement>),
+    VariableDecl(String, Option<Expression>, Option<Expression>),
     Assign(Expression, Token, Expression),
     Expression(Expression),
 }
 impl Statement {
     pub fn parse(input: &mut ParserInput, lexer_input: &mut LexerInput) -> Option<Statement> {
+        if input.eof() {
+            return None;
+        }
         if input.peek(|t| matches!(t, Token::Keyword(Keyword::Function))) {
             input.next();
             let ident = input.next().unwrap_or_else(|| {
@@ -84,7 +91,11 @@ impl Statement {
             }
             let mut params = Vec::new();
             input.next();
-            while let Some((Token::Identifier(name), _)) = input.next() {
+            while input.peek(|t| matches!(t, Token::Identifier(_))) {
+                let name = match input.next().unwrap().0 {
+                    Token::Identifier(s) => s,
+                    _ => unreachable!(),
+                };
                 if !input.peek(|t| matches!(t, Token::Colon)) {
                     error!(
                         lexer_input.clone(),
@@ -161,6 +172,54 @@ impl Statement {
                 expr,
             ))
         } else {
+            Statement::class_decl(input, lexer_input)
+        }
+    }
+    pub fn class_decl(input: &mut ParserInput, lexer_input: &mut LexerInput) -> Option<Statement> {
+        if input.peek(|t| matches!(t, Token::Keyword(Keyword::Class))) {
+            input.next();
+            let ident = input.next().unwrap_or_else(|| {
+                error!(
+                    lexer_input.clone(),
+                    input
+                        .next()
+                        .map_or(input.tokens.last().unwrap().1.clone(), |t| t.1),
+                    "Expected identifier"
+                )
+            });
+            let ident_str = match ident.0 {
+                Token::Identifier(s) => s,
+                _ => {
+                    error!(lexer_input.clone(), ident.1, "Expected identifier");
+                }
+            };
+            if !input.peek(|t| matches!(t, Token::OpenBrace)) {
+                error!(
+                    lexer_input.clone(),
+                    input
+                        .next()
+                        .map_or(input.tokens.last().unwrap().1.clone(), |t| t.1),
+                    "Expected opening brace"
+                );
+            }
+            input.next();
+            let mut members = Vec::new();
+            while let Some(member) = Statement::parse(input, lexer_input) {
+                members.push(member);
+            }
+            if !input.peek(|t| matches!(t, Token::CloseBrace)) {
+                error!(
+                    lexer_input.clone(),
+                    input
+                        .next()
+                        .map_or(input.tokens.last().unwrap().1.clone(), |t| t.1),
+                    "Expected closing brace"
+                );
+            } else {
+                input.next();
+            }
+            Some(Statement::ClassDecl(ident_str, members))
+        } else {
             let val = Statement::variable_decl(input, lexer_input);
             if input.peek(|t| matches!(t, Token::Semicolon)) {
                 input.next();
@@ -197,13 +256,27 @@ impl Statement {
                     error!(lexer_input.clone(), ident.1, "Expected identifier");
                 }
             };
+            let var_type = if input.peek(|t| matches!(t, Token::Colon)) {
+                input.next();
+                Some(Expression::parse(input, lexer_input).unwrap_or_else(|| {
+                    error!(
+                        lexer_input.clone(),
+                        input
+                            .next()
+                            .map_or(input.tokens.last().unwrap().1.clone(), |t| t.1),
+                        "Expected expression"
+                    );
+                }))
+            } else {
+                None
+            };
             if input.peek(Token::is_assign_op) {
                 input.next();
                 let expr = Expression::parse(input, lexer_input)
                     .unwrap_or_else(|| error!(lexer_input.clone(), ident.1, "Expected expression"));
-                Some(Statement::VariableDecl(ident_str, Some(expr)))
+                Some(Statement::VariableDecl(ident_str, var_type, Some(expr)))
             } else {
-                Some(Statement::VariableDecl(ident_str, None))
+                Some(Statement::VariableDecl(ident_str, var_type, None))
             }
         } else {
             Statement::assign(input, lexer_input)
@@ -235,6 +308,9 @@ pub enum Expression {
 }
 impl Expression {
     pub fn parse(input: &mut ParserInput, lexer_input: &mut LexerInput) -> Option<Expression> {
+        if input.eof() {
+            return None;
+        }
         let left = Expression::unary(input, lexer_input)?;
         if input.peek(Token::is_binary_op) {
             let op = input.next().unwrap().0;

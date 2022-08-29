@@ -23,9 +23,8 @@ mod test {
         let lexer = Lexer::new(include_str!("example.owl"));
         let mut lexer_input = lexer.input.clone();
         let mut parser_input = ParserInput::from(lexer);
-        println!(
-            "{:?}",
-            Statement::parse(&mut parser_input, &mut lexer_input)
-        );
+        while let Some(statement) = Statement::parse(&mut parser_input, &mut lexer_input) {
+            println!("{:?}", statement);
+        }
     }
 }

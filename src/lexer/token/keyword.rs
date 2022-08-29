@@ -15,6 +15,7 @@ pub enum Keyword {
     Return,
     True,
     While,
+    Class,
 }
 impl FromStr for Keyword {
     type Err = ();
@@ -33,6 +34,7 @@ impl FromStr for Keyword {
             "return" => Ok(Keyword::Return),
             "true" => Ok(Keyword::True),
             "while" => Ok(Keyword::While),
+            "class" => Ok(Keyword::Class),
             _ => Err(()),
         }
     }
