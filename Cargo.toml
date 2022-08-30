@@ -10,4 +10,7 @@ name = "OpenWebLang"
 opt-level = 0
 debug = true
 
+[[example]]
+name = "repl"
+
 [dependencies]
