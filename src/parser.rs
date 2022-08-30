@@ -54,6 +54,7 @@ pub enum Statement {
         Expression,
     ),
     ClassDecl(String, Vec<Statement>),
+    Import(Vec<Expression>),
     VariableDecl(String, Option<Expression>, Option<Expression>),
     Assign(Expression, Token, Expression),
     Expression(Expression),
@@ -220,7 +221,7 @@ impl Statement {
             }
             Some(Statement::ClassDecl(ident_str, members))
         } else {
-            let val = Statement::variable_decl(input, lexer_input);
+            let val = Statement::import(input, lexer_input);
             if input.peek(|t| matches!(t, Token::Semicolon)) {
                 input.next();
                 val
@@ -233,6 +234,73 @@ impl Statement {
                     "Expected semicolon"
                 );
             }
+        }
+    }
+    pub fn import(input: &mut ParserInput, lexer_input: &mut LexerInput) -> Option<Statement> {
+        if input.peek(|t| matches!(t, Token::Keyword(Keyword::Import))) {
+            input.next();
+            let mut exprs = Vec::new();
+            let mut had_expr = false;
+            while let Some(expr) = Expression::parse(input, lexer_input) {
+                match expr {
+                    Expression::Path(path) => {
+                        if input.peek(|t| matches!(t, Token::OpenBrace)) {
+                            input.next();
+                            while let Some(path2) = Expression::parse(input, lexer_input) {
+                                match path2 {
+                                    Expression::Path(mut path2) => {
+                                        let mut clone = path.clone();
+                                        clone.append(&mut path2);
+                                        exprs.push(Expression::Path(clone));
+                                    }
+                                    _ => {
+                                        error!(
+                                            lexer_input.clone(),
+                                            input.next().map_or(
+                                                input.tokens.last().unwrap().1.clone(),
+                                                |t| t.1
+                                            ),
+                                            "Expected path"
+                                        );
+                                    }
+                                }
+                                if !input.peek(|t| matches!(t, Token::Comma)) {
+                                    break;
+                                } else {
+                                    input.next();
+                                }
+                            }
+                            if !input.peek(|t| matches!(t, Token::CloseBrace)) {
+                                error!(
+                                    lexer_input.clone(),
+                                    input
+                                        .next()
+                                        .map_or(input.tokens.last().unwrap().1.clone(), |t| t.1),
+                                    "Expected closing brace"
+                                );
+                            } else {
+                                input.next();
+                            }
+                        } else {
+                            exprs.push(Expression::Path(path));
+                        }
+                    }
+                    _ => exprs.push(expr),
+                }
+                had_expr = true;
+            }
+            if !had_expr {
+                error!(
+                    lexer_input.clone(),
+                    input
+                        .next()
+                        .map_or(input.tokens.last().unwrap().1.clone(), |t| t.1),
+                    "Expected expression"
+                );
+            }
+            Some(Statement::Import(exprs))
+        } else {
+            Statement::variable_decl(input, lexer_input)
         }
     }
     pub fn variable_decl(

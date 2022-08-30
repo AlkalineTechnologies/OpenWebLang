@@ -16,6 +16,7 @@ pub enum Keyword {
     True,
     While,
     Class,
+    Import,
 }
 impl FromStr for Keyword {
     type Err = ();
@@ -35,6 +36,7 @@ impl FromStr for Keyword {
             "true" => Ok(Keyword::True),
             "while" => Ok(Keyword::While),
             "class" => Ok(Keyword::Class),
+            "import" => Ok(Keyword::Import),
             _ => Err(()),
         }
     }

@@ -1,5 +1,4 @@
-// import {LibA, libB, libX} from '@Package-Name/Cool-Libraries';
-
+import Foo.{Bar, Baz};
 
 // functions with no return type are void by default
 function main() {
