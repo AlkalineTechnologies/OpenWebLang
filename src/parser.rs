@@ -64,6 +64,12 @@ impl Statement {
         if input.eof() {
             return None;
         }
+        Statement::function_decl(input, lexer_input)
+    }
+    pub fn function_decl(
+        input: &mut ParserInput,
+        lexer_input: &mut LexerInput,
+    ) -> Option<Statement> {
         if input.peek(|t| matches!(t, Token::Keyword(Keyword::Function))) {
             input.next();
             let ident = input.next().unwrap_or_else(|| {
@@ -206,7 +212,20 @@ impl Statement {
             input.next();
             let mut members = Vec::new();
             while let Some(member) = Statement::parse(input, lexer_input) {
-                members.push(member);
+                match member {
+                    Statement::FunctionDecl(_, _, _, _) | Statement::VariableDecl(_, _, _) => {
+                        members.push(member)
+                    }
+                    _ => {
+                        error!(
+                            lexer_input.clone(),
+                            input
+                                .next()
+                                .map_or(input.tokens.last().unwrap().1.clone(), |t| t.1),
+                            "Only functions and variables can be members of classes"
+                        );
+                    }
+                }
             }
             if !input.peek(|t| matches!(t, Token::CloseBrace)) {
                 error!(
@@ -285,7 +304,13 @@ impl Statement {
                             exprs.push(Expression::Path(path));
                         }
                     }
-                    _ => exprs.push(expr),
+                    _ => error!(
+                        lexer_input.clone(),
+                        input
+                            .next()
+                            .map_or(input.tokens.last().unwrap().1.clone(), |t| t.1),
+                        "Expected path"
+                    ),
                 }
                 had_expr = true;
             }
@@ -338,13 +363,27 @@ impl Statement {
             } else {
                 None
             };
+            if !matches!(var_type, Some(Expression::Path(_)) | None) {
+                error!(
+                    lexer_input.clone(),
+                    input
+                        .next()
+                        .map_or(input.tokens.last().unwrap().1.clone(), |t| t.1),
+                    "Expected path"
+                );
+            }
             if input.peek(Token::is_assign_op) {
                 input.next();
                 let expr = Expression::parse(input, lexer_input)
                     .unwrap_or_else(|| error!(lexer_input.clone(), ident.1, "Expected expression"));
                 Some(Statement::VariableDecl(ident_str, var_type, Some(expr)))
-            } else {
+            } else if var_type.is_some() {
                 Some(Statement::VariableDecl(ident_str, var_type, None))
+            } else {
+                error!(
+                    lexer_input.clone(),
+                    ident.1, "Variables must have either an explicit type or an initial value"
+                );
             }
         } else {
             Statement::assign(input, lexer_input)
@@ -379,10 +418,121 @@ impl Expression {
         if input.eof() {
             return None;
         }
-        let left = Expression::unary(input, lexer_input)?;
-        if input.peek(Token::is_binary_op) {
+        Expression::logic(input, lexer_input)
+    }
+    pub fn logic(input: &mut ParserInput, lexer_input: &mut LexerInput) -> Option<Expression> {
+        let left = Expression::bitwise(input, lexer_input)?;
+        if input.peek(|t| matches!(t, Token::And | Token::Or)) {
             let op = input.next().unwrap().0;
-            let right = Expression::parse(input, lexer_input).unwrap_or_else(|| {
+            let right = Expression::bitwise(input, lexer_input).unwrap_or_else(|| {
+                error!(
+                    lexer_input.clone(),
+                    input
+                        .next()
+                        .map_or(input.tokens.last().unwrap().1.clone(), |t| t.1),
+                    "Expected expression"
+                );
+            });
+            Some(Expression::Binary(Box::new(left), op, Box::new(right)))
+        } else {
+            Some(left)
+        }
+    }
+    pub fn bitwise(input: &mut ParserInput, lexer_input: &mut LexerInput) -> Option<Expression> {
+        let left = Expression::equality(input, lexer_input)?;
+        if input.peek(|t| matches!(t, Token::BitAnd | Token::BitOr | Token::BitXor)) {
+            let op = input.next().unwrap().0;
+            let right = Expression::equality(input, lexer_input).unwrap_or_else(|| {
+                error!(
+                    lexer_input.clone(),
+                    input
+                        .next()
+                        .map_or(input.tokens.last().unwrap().1.clone(), |t| t.1),
+                    "Expected expression"
+                );
+            });
+            Some(Expression::Binary(Box::new(left), op, Box::new(right)))
+        } else {
+            Some(left)
+        }
+    }
+    pub fn equality(input: &mut ParserInput, lexer_input: &mut LexerInput) -> Option<Expression> {
+        let left = Expression::comparison(input, lexer_input)?;
+        if input.peek(|t| matches!(t, Token::Eq | Token::Ne)) {
+            let op = input.next().unwrap().0;
+            let right = Expression::comparison(input, lexer_input).unwrap_or_else(|| {
+                error!(
+                    lexer_input.clone(),
+                    input
+                        .next()
+                        .map_or(input.tokens.last().unwrap().1.clone(), |t| t.1),
+                    "Expected expression"
+                );
+            });
+            Some(Expression::Binary(Box::new(left), op, Box::new(right)))
+        } else {
+            Some(left)
+        }
+    }
+    pub fn comparison(input: &mut ParserInput, lexer_input: &mut LexerInput) -> Option<Expression> {
+        let left = Expression::shift(input, lexer_input)?;
+        if input.peek(|t| matches!(t, Token::Lt | Token::Le | Token::Gt | Token::Ge)) {
+            let op = input.next().unwrap().0;
+            let right = Expression::shift(input, lexer_input).unwrap_or_else(|| {
+                error!(
+                    lexer_input.clone(),
+                    input
+                        .next()
+                        .map_or(input.tokens.last().unwrap().1.clone(), |t| t.1),
+                    "Expected expression"
+                );
+            });
+            Some(Expression::Binary(Box::new(left), op, Box::new(right)))
+        } else {
+            Some(left)
+        }
+    }
+    pub fn shift(input: &mut ParserInput, lexer_input: &mut LexerInput) -> Option<Expression> {
+        let left = Expression::term(input, lexer_input)?;
+        if input.peek(|t| matches!(t, Token::Shl | Token::Shr)) {
+            let op = input.next().unwrap().0;
+            let right = Expression::term(input, lexer_input).unwrap_or_else(|| {
+                error!(
+                    lexer_input.clone(),
+                    input
+                        .next()
+                        .map_or(input.tokens.last().unwrap().1.clone(), |t| t.1),
+                    "Expected expression"
+                );
+            });
+            Some(Expression::Binary(Box::new(left), op, Box::new(right)))
+        } else {
+            Some(left)
+        }
+    }
+    pub fn term(input: &mut ParserInput, lexer_input: &mut LexerInput) -> Option<Expression> {
+        let left = Expression::factor(input, lexer_input)?;
+        if input.peek(|t| matches!(t, Token::Add | Token::Sub)) {
+            let op = input.next().unwrap().0;
+            let right = Expression::factor(input, lexer_input).unwrap_or_else(|| {
+                error!(
+                    lexer_input.clone(),
+                    input
+                        .next()
+                        .map_or(input.tokens.last().unwrap().1.clone(), |t| t.1),
+                    "Expected expression"
+                );
+            });
+            Some(Expression::Binary(Box::new(left), op, Box::new(right)))
+        } else {
+            Some(left)
+        }
+    }
+    pub fn factor(input: &mut ParserInput, lexer_input: &mut LexerInput) -> Option<Expression> {
+        let left = Expression::unary(input, lexer_input)?;
+        if input.peek(|t| matches!(t, Token::Mul | Token::Div | Token::Mod)) {
+            let op = input.next().unwrap().0;
+            let right = Expression::unary(input, lexer_input).unwrap_or_else(|| {
                 error!(
                     lexer_input.clone(),
                     input
@@ -403,15 +553,35 @@ impl Expression {
                 Box::new(Expression::unary(input, lexer_input)?),
             ))
         } else {
+            Expression::grouping(input, lexer_input)
+        }
+    }
+    pub fn grouping(input: &mut ParserInput, lexer_input: &mut LexerInput) -> Option<Expression> {
+        if input.peek(|t| matches!(t, Token::OpenParen)) {
+            input.next();
+            let expr = Expression::parse(input, lexer_input)?;
+            if input.peek(|t| matches!(t, Token::CloseParen)) {
+                input.next();
+                Some(expr)
+            } else {
+                error!(
+                    lexer_input.clone(),
+                    input
+                        .next()
+                        .map_or(input.tokens.last().unwrap().1.clone(), |t| t.1),
+                    "Expected closing parenthesis"
+                );
+            }
+        } else {
             Expression::block(input, lexer_input)
         }
     }
     pub fn block(input: &mut ParserInput, lexer_input: &mut LexerInput) -> Option<Expression> {
         if input.peek(|t| matches!(t, Token::OpenBrace)) {
             input.next();
-            let mut expressions = Vec::new();
-            while let Some(expr) = Statement::parse(input, lexer_input) {
-                expressions.push(expr);
+            let mut statements = Vec::new();
+            while let Some(stmt) = Statement::parse(input, lexer_input) {
+                statements.push(stmt);
                 if input.peek(|t| matches!(t, Token::CloseBrace)) {
                     break;
                 }
@@ -427,7 +597,7 @@ impl Expression {
             } else {
                 input.next();
             }
-            Some(Expression::Block(expressions))
+            Some(Expression::Block(statements))
         } else {
             Expression::function_call(input, lexer_input)
         }

@@ -43,6 +43,12 @@ impl LexerInput {
     {
         self.data.get(self.pos).map_or(false, func)
     }
+    pub fn rewind(&mut self) {
+        self.pos -= 1;
+    }
+    pub fn pos(&self) -> usize {
+        self.pos
+    }
 }
 impl From<String> for LexerInput {
     fn from(s: String) -> Self {
@@ -74,12 +80,8 @@ impl Clone for LexerInput {
 
 fn parse_number(input: &mut LexerInput) -> Token {
     let mut number = String::new();
-    while let Some(ch) = input.next() {
-        if ch.is_ascii_digit() {
-            number.push(ch);
-        } else {
-            break;
-        }
+    while input.peek(char::is_ascii_digit) {
+        number.push(input.next().unwrap());
     }
     if number.contains('.') {
         Token::FloatLiteral(f64::from_str(&number).unwrap())
@@ -268,7 +270,10 @@ impl Iterator for Lexer {
                         )
                     }
                 }
-                c if c.is_ascii_digit() => parse_number(&mut self.input),
+                c if c.is_ascii_digit() => {
+                    self.input.rewind();
+                    parse_number(&mut self.input)
+                }
                 c if c.is_alphabetic() => {
                     let mut string = String::new();
                     string.push(c);

@@ -9,5 +9,5 @@ class Foo {
     function bar() {
         Console.log("Hello, world!");
     }
-    let baz: u8;
+    let baz: u8 = 10 * 1 + (1 + 1);
 }

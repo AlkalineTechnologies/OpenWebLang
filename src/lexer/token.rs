@@ -128,18 +128,6 @@ impl Token {
                 | Token::Le
                 | Token::Gt
                 | Token::Ge
-                | Token::Assign
-                | Token::AddAssign
-                | Token::SubAssign
-                | Token::MulAssign
-                | Token::DivAssign
-                | Token::ModAssign
-                | Token::PowAssign
-                | Token::BitAndAssign
-                | Token::BitOrAssign
-                | Token::BitXorAssign
-                | Token::ShlAssign
-                | Token::ShrAssign
         )
     }
     pub fn is_unary_op(&self) -> bool {
